@@ -27,8 +27,6 @@ window.logger = logger; // expose logger interface to other renderer processes
 const log = logger( 'desktop:preload' );
 const desktop = remote.getGlobal( 'desktop' );
 
-log.debug( 'Setting up preload script' );
-
 if ( desktop.settings.getSetting( 'spellcheck-enabled' ) ) {
 	log.debug( 'Initializing spellchecker' );
 
