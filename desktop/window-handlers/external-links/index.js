@@ -51,13 +51,6 @@ function isValidBrowserUrl( url ) {
 	return false;
 }
 
-function isWpAdminLogin( url ) {
-	const parsedURL = new URL( url );
-	const isWpLogin = parsedURL.pathname.includes( 'wp-login.php' );
-	const isReauth = parsedURL.searchParams ? parsedURL.searchParams.get( 'reauth' ) : null;
-	return isWpLogin && isReauth;
-}
-
 function openInBrowser( event, url ) {
 	if ( isValidBrowserUrl( url ) ) {
 		log.info( `Using system default handler for URL: ${ url }` );
@@ -83,12 +76,6 @@ module.exports = function( mainWindow ) {
 
 	webContents.on( 'will-navigate', function( event, url ) {
 		const parsedUrl = new URL( url );
-
-		// Handle wp-admin login events from Calypso (i.e. window.location.replace overrides)
-		if ( isWpAdminLogin( url ) ) {
-			log.info( `Ignoring window location override to URL: '${parsedUrl.origin + parsedUrl.pathname}'` );
-			event.preventDefault();
-		}
 
 		for ( let x = 0; x < ALWAYS_OPEN_IN_APP.length; x++ ) {
 			const alwaysOpenUrl = new URL( ALWAYS_OPEN_IN_APP[ x ] );
