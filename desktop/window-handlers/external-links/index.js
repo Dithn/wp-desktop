@@ -115,35 +115,80 @@ module.exports = function( mainWindow ) {
 	} );
 
 	ipc.on( 'cannot-open-editor', async( event, info ) => {
-		const { origin, editorUrl } = info;
+		const { siteId, origin, editorUrl, isAdmin } = info;
 		const parsedURL = new URL( origin );
 
 		const promptWpAdminAuth = () => {
+			let buttons = [ 'Proceed in Browser', 'Cancel' ];
+			if ( isAdmin ) {
+				buttons = [ 'Enable SSO and Continue', 'Proceed in Browser', 'Cancel' ];
+			}
+
+			function enableSSOandContinue() {
+				log.info( 'User selected \'Enable SSO and Continue\' ' );
+				// TODO: move this to Calypso commands? (may not make sense as we have to wait for a response)
+				// TODO: Use a promise race to resolve timeout
+				// await ( timeout or promise resolution )
+				mainWindow.webContents.send( 'enable-site-option-sso', { siteId } );
+				ipc.on( 'enable-site-option-sso-status', ( activationStatusEvent, activationStatusInfo ) => {
+					const { status, message } = activationStatusInfo;
+					ipc.removeAllListeners( 'enable-site-option-sso-status' );
+					if ( status === 'success' ) {
+						log.info( 'SSO enabled success!', message );
+						// TODO: Proceed to editor ( or allow delay to set session cookie )
+						// NEXT: save da 🍪
+					} else {
+						log.info( 'SSO enabled failure: ', message );
+					}
+				} );
+			}
+
+			function proceedInBrowser() {
+				log.info( 'User selected \'Proceed in Browser\'...' )
+				openInBrowser( event, editorUrl );
+			}
+
+			function cancel() {
+				log.info( 'User selected \'Cancel\'...' );
+			}
+
 			try {
 				const selected = dialog.showMessageBox( mainWindow, {
 					type: 'info',
-					buttons: [ 'Proceed in Browser', 'Cancel' ],
+					buttons: buttons,
 					title: 'Jetpack Authorization Required',
 					message: 'This feature requires that Secure Sign-On is enabled in the Jetpack settings of the site:' +
 					'\n\n' +
 					`${parsedURL.origin}`,
-					detail: 'You may try again after changing the site\'s Jetpack settings ' +
-					'(requires application re-start), ' +
+					detail: 'You may proceed after changing the site\'s Jetpack settings ' +
 					'or you can proceed in an external browser.'
 				} );
 
 				switch ( selected ) {
 					case 0:
-						log.info( 'User selected \'Proceed in Browser\'...' )
-						openInBrowser( event, editorUrl );
+						if ( isAdmin ) {
+							enableSSOandContinue();
+						} else {
+							proceedInBrowser();
+						}
 						break;
 					case 1:
-						log.info( 'User selected \'Cancel\'...' );
+						if ( isAdmin ) {
+							proceedInBrowser();
+						} else {
+							cancel();
+						}
+						break;
+					case 2:
+						cancel();
 						break;
 				}
-				showMySites( mainWindow );
-				// Update last location so a redirect isn't automatically triggered on app relaunch
-				Settings.saveSetting( settingConstants.LAST_LOCATION, `/stats/day/${parsedURL.hostname}` );
+				if ( ! ( isAdmin && selected === 0 ) ) {
+					// TODO: refactor this to navigateToShowMySites( site )
+					showMySites( mainWindow );
+					// Update last location so a redirect isn't automatically triggered on app relaunch
+					Settings.saveSetting( settingConstants.LAST_LOCATION, `/stats/day/${parsedURL.hostname}` );
+				}
 			} catch ( error ) {
 				log.error( 'Failed to prompt for Jetpack authorization: ', error );
 			}
@@ -152,5 +197,9 @@ module.exports = function( mainWindow ) {
 		await delay( 300 );
 
 		promptWpAdminAuth();
+	} );
+
+	ipc.on( 'jetpack-module-activate-status', async( event, info ) => {
+		log.info( 'Jetpack module activation status: ${info.status}: ', info.message );
 	} );
 };

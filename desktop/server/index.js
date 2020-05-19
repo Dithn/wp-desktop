@@ -16,7 +16,7 @@ const Config = require( 'lib/config' );
 const server = require( './server' );
 const Settings = require( 'lib/settings' );
 const settingConstants = require( 'lib/settings/constants' );
-const cookieAuth = require( 'lib/cookie-auth' );
+const { auth: cookieAuth } = require( 'lib/cookie-auth' );
 const appInstance = require( 'lib/app-instance' );
 const platform = require( 'lib/platform' );
 const System = require( 'lib/system' );
@@ -73,6 +73,11 @@ function showAppWindow() {
 				if ( name.toLowerCase() === 'x-frame-options' ) {
 					delete headers[ name ];
 				}
+				// if ( name.toLowerCase() === 'set-cookie' ) {
+				// 	const cookie = headers[ name ];
+				// 	log.debug( 'Setting session cookie: ', cookie );
+				// 	mainWindow.webContents.session.cookies.set( cookie );
+				// }
 			} );
 			callback( {
 				cancel: false,
@@ -114,8 +119,8 @@ function startServer( started_cb ) {
 
 function isValidLastLocation( loc ) {
 	const invalids = [
-		'/desktop/',     // Page shown when no Electron
-		'/start'         // Don't attempt to resume the signup flow
+		'/desktop/', // Page shown when no Electron
+		'/start' // Don't attempt to resume the signup flow
 	];
 
 	if ( typeof loc !== 'string' ) {
