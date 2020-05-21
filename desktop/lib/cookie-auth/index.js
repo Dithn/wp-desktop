@@ -11,10 +11,6 @@ const url = require( 'url' );
 const events = require( 'events' );
 
 /**
- * Internal dependencies
- */
-const log = require( 'lib/logger' )( 'desktop:cookie-auth' );
-/**
  * Module variables
  */
 const noop = function() {};
@@ -87,7 +83,7 @@ function setSessionCookies( window, onComplete ) {
 		var cookieHeaders = response.headers['set-cookie'];
 		var count = 0;
 		if ( !Array.isArray( cookieHeaders ) ) {
-			cookieHeaders = [ cookieHeaders ];
+			cookieHeaders = [cookieHeaders];
 		}
 
 		count = cookieHeaders.length;
@@ -97,7 +93,6 @@ function setSessionCookies( window, onComplete ) {
 			if ( cookie.httponly ) {
 				cookie.session = true;
 			}
-
 			window.webContents.session.cookies.set( cookie, function() {
 				count --;
 				if ( count === 0 ) {
@@ -130,8 +125,6 @@ function auth( window, onAuthorized ) {
 					var domain = cookie.domain;
 					var cookieUrl = 'https://' + ( domain.indexOf( '.' ) === 0 ? domain.slice( 1 ) : domain ) + cookie.path;
 
-					log.info( 'Deleting cookie: ', cookie );
-
 					window.webContents.session.cookies.remove( cookieUrl, cookie.name, noop );
 				} );
 			} );
@@ -141,7 +134,4 @@ function auth( window, onAuthorized ) {
 	return window;
 }
 
-module.exports = {
-	auth,
-	setSessionCookies,
-}
+module.exports = auth;
