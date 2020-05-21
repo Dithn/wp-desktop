@@ -115,8 +115,26 @@ module.exports = function( mainWindow ) {
 	} );
 
 	ipc.on( 'cannot-open-editor', async( event, info ) => {
+		log.info( 'Cannot open editor for site: ', info )
 		const { siteId, origin, editorUrl, isAdmin } = info;
 		const parsedURL = new URL( origin );
+
+		const extractRelativeEditorUrl = ( url ) => {
+			const parsed = new URL( url );
+
+			const params = parsed.searchParams;
+
+			if ( params ) {
+				const redirect = params.get( 'redirect_to' );
+
+				if ( redirect ) {
+					const parsedRedirect = new URL( redirect );
+					return parsedRedirect.pathname;
+				}
+			}
+
+			return url;
+		}
 
 		const promptWpAdminAuth = () => {
 			let buttons = [ 'Proceed in Browser', 'Cancel' ];
@@ -135,8 +153,14 @@ module.exports = function( mainWindow ) {
 					ipc.removeAllListeners( 'enable-site-option-response' );
 					if ( status === 'success' ) {
 						log.info( 'SSO enabled for site: ', origin );
+						let didNavigate = false;
 						ipc.on( 'refresh-site-state-response', () => {
-							log.info( 'Received state refresh for site: ', origin );
+							if ( ! didNavigate ) {
+								didNavigate = true;
+								log.info( 'Received state refresh for site: ', origin );
+								delay( 1000 );
+								mainWindow.webContents.send( 'navigate', extractRelativeEditorUrl( editorUrl ) );
+							}
 						} );
 						mainWindow.webContents.send( 'refresh-site-state', siteId );
 					} else {
