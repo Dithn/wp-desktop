@@ -147,26 +147,21 @@ module.exports = function( mainWindow ) {
 				// TODO: move this to Calypso commands? (may not make sense as we have to wait for a response)
 				// TODO: Use a promise race to resolve timeout
 				// await ( timeout or promise resolution )
-				mainWindow.webContents.send( 'enable-site-option', { siteId, option: 'sso' } );
 				ipc.on( 'enable-site-option-response', ( activationStatusEvent, activationStatusInfo ) => {
 					const { status } = activationStatusInfo;
 					ipc.removeAllListeners( 'enable-site-option-response' );
 					if ( status === 'success' ) {
 						log.info( 'SSO enabled for site: ', origin );
-						let didNavigate = false;
-						ipc.on( 'refresh-site-state-response', () => {
-							if ( ! didNavigate ) {
-								didNavigate = true;
-								log.info( 'Received state refresh for site: ', origin );
-								delay( 1000 );
-								mainWindow.webContents.send( 'navigate', extractRelativeEditorUrl( editorUrl ) );
-							}
+						ipc.on( 'request-site-response', () => {
+							log.info( 'Received state refresh for site: ', origin );
+							mainWindow.webContents.send( 'navigate', extractRelativeEditorUrl( editorUrl ) );
 						} );
-						mainWindow.webContents.send( 'refresh-site-state', siteId );
+						mainWindow.webContents.send( 'request-site', siteId );
 					} else {
 						log.info( 'Failed to enable SSO for site: ', origin );
 					}
 				} );
+				mainWindow.webContents.send( 'enable-site-option', { siteId, option: 'sso' } );
 			}
 
 			function proceedInBrowser() {
