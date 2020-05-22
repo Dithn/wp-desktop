@@ -3,18 +3,15 @@
 /**
  * External Dependencies
  */
-const { promisify } = require( 'util' );
-const { dialog, ipcMain: ipc } = require( 'electron' );
-const shell = require( 'electron' ).shell;
+const { ipcMain: ipc } = require( 'electron' );
 const { URL, format } = require( 'url' );
 
 /**
  * Internal dependencies
  */
 const Config = require( 'lib/config' );
-const Settings = require( 'lib/settings' );
-const { showMySites } = require( 'lib/calypso-commands' );
-const settingConstants = require( 'lib/settings/constants' );
+const { promptEnableSSO } = require( './jetpack' );
+const openInBrowser = require( './open-in-browser' );
 const log = require( 'lib/logger' )( 'desktop:external-links' );
 
 /**
@@ -22,7 +19,6 @@ const log = require( 'lib/logger' )( 'desktop:external-links' );
  */
 const SCALE_NEW_WINDOW_FACTOR = 0.9;
 const OFFSET_NEW_WINDOW = 50;
-const delay = promisify( setTimeout );
 
 // Protocol doesn't matter - only the domain + path is checked
 const ALWAYS_OPEN_IN_APP = [
@@ -40,25 +36,6 @@ const DONT_OPEN_IN_BROWSER = [
 ];
 
 const domainAndPathSame = ( first, second ) => first.hostname === second.hostname && ( first.pathname === second.pathname || second.pathname === '/*' );
-
-function isValidBrowserUrl( url ) {
-	const parsedUrl = new URL( url );
-
-	if ( parsedUrl.protocol === 'http:' || parsedUrl.protocol === 'https:' ) {
-		return url;
-	}
-
-	return false;
-}
-
-function openInBrowser( event, url ) {
-	if ( isValidBrowserUrl( url ) ) {
-		log.info( `Using system default handler for URL: ${ url }` );
-		shell.openExternal( url );
-	}
-
-	event.preventDefault();
-}
 
 function replaceInternalCalypsoUrl( url ) {
 	if ( url.hostname === Config.server_host ) {
@@ -114,113 +91,8 @@ module.exports = function( mainWindow ) {
 		openInBrowser( event, openUrl );
 	} );
 
-	ipc.on( 'cannot-open-editor', async( event, info ) => {
+	ipc.on( 'cannot-use-editor', ( _, info ) => {
 		log.info( 'Cannot open editor for site: ', info )
-		const { siteId, origin, editorUrl, isAdmin } = info;
-		const parsedURL = new URL( origin );
-
-		const extractRelativeEditorUrl = ( url ) => {
-			const parsed = new URL( url );
-
-			const params = parsed.searchParams;
-
-			if ( params ) {
-				const redirect = params.get( 'redirect_to' );
-
-				if ( redirect ) {
-					const parsedRedirect = new URL( redirect );
-					return parsedRedirect.pathname;
-				}
-			}
-
-			return url;
-		}
-
-		const promptWpAdminAuth = () => {
-			let buttons = [ 'Proceed in Browser', 'Cancel' ];
-			if ( isAdmin ) {
-				buttons = [ 'Enable SSO and Continue', 'Proceed in Browser', 'Cancel' ];
-			}
-
-			function enableSSOandContinue() {
-				log.info( 'User selected \'Enable SSO and Continue\' ' );
-				// TODO: move this to Calypso commands? (may not make sense as we have to wait for a response)
-				// TODO: Use a promise race to resolve timeout
-				// await ( timeout or promise resolution )
-				ipc.on( 'enable-site-option-response', ( activationStatusEvent, activationStatusInfo ) => {
-					const { status } = activationStatusInfo;
-					ipc.removeAllListeners( 'enable-site-option-response' );
-					if ( status === 'success' ) {
-						log.info( 'SSO enabled for site: ', origin );
-						ipc.on( 'request-site-response', () => {
-							log.info( 'Received state refresh for site: ', origin );
-							mainWindow.webContents.send( 'navigate', extractRelativeEditorUrl( editorUrl ) );
-						} );
-						mainWindow.webContents.send( 'request-site', siteId );
-					} else {
-						log.info( 'Failed to enable SSO for site: ', origin );
-					}
-				} );
-				mainWindow.webContents.send( 'enable-site-option', { siteId, option: 'sso' } );
-			}
-
-			function proceedInBrowser() {
-				log.info( 'User selected \'Proceed in Browser\'...' )
-				openInBrowser( event, editorUrl );
-			}
-
-			function cancel() {
-				log.info( 'User selected \'Cancel\'...' );
-			}
-
-			try {
-				const selected = dialog.showMessageBox( mainWindow, {
-					type: 'info',
-					buttons: buttons,
-					title: 'Jetpack Authorization Required',
-					message: 'This feature requires that Secure Sign-On is enabled in the Jetpack settings of the site:' +
-					'\n\n' +
-					`${parsedURL.origin}`,
-					detail: 'You may proceed after changing the site\'s Jetpack settings ' +
-					'or you can proceed in an external browser.'
-				} );
-
-				switch ( selected ) {
-					case 0:
-						if ( isAdmin ) {
-							enableSSOandContinue();
-						} else {
-							proceedInBrowser();
-						}
-						break;
-					case 1:
-						if ( isAdmin ) {
-							proceedInBrowser();
-						} else {
-							cancel();
-						}
-						break;
-					case 2:
-						cancel();
-						break;
-				}
-				if ( ! ( isAdmin && selected === 0 ) ) {
-					// TODO: refactor this to navigateToShowMySites( site )
-					showMySites( mainWindow );
-					// Update last location so a redirect isn't automatically triggered on app relaunch
-					Settings.saveSetting( settingConstants.LAST_LOCATION, `/stats/day/${parsedURL.hostname}` );
-				}
-			} catch ( error ) {
-				log.error( 'Failed to prompt for Jetpack authorization: ', error );
-			}
-		}
-
-		await delay( 300 );
-
-		promptWpAdminAuth();
-	} );
-
-	ipc.on( 'jetpack-module-activate-status', async( event, info ) => {
-		log.info( 'Jetpack module activation status: ${info.status}: ', info.message );
+		promptEnableSSO( mainWindow, info );
 	} );
 };
